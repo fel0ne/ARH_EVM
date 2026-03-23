@@ -1,0 +1,9 @@
+[submodule "backend/third_party/cpp-httplib"]
+	path = backend/third_party/cpp-httplib
+	url = https://github.com/yhirose/cpp-httplib.git
+[submodule "backend/third_party/json"]
+	path = backend/third_party/json
+	url = https://github.com/nlohmann/json.git
+[submodule "backend/third_party/googletest"]
+	path = backend/third_party/googletest
+	url = https://github.com/google/googletest.git
