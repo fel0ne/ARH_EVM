@@ -14,11 +14,14 @@ private:
     std::vector<ProductDTO> products;
     std::vector<std::pair<int, std::string>> categories;
     bool categoriesLoaded = false;
-    char search[128] = "";
     int sortMode = 0;
 
     bool openViewPopup = false;
     bool openEditPopup = false;
+    bool openSearchPopup = false;
+    char searchArticleBuf[64] = "";
+    ProductDTO foundProduct;
+    bool hasSearchResult = false;
 
     // buffers для добавления товара
     char nameBuf[128] = "";
@@ -109,7 +112,6 @@ private:
 
         ImGui::Text("Категория ID: %d", selectedCategoryId);
 
-        ImGui::InputText("Поиск", search, IM_ARRAYSIZE(search));
         ImGui::RadioButton("Без сортировки", &sortMode, 0);
         ImGui::SameLine();
         ImGui::RadioButton("По цене", &sortMode, 1);
@@ -117,6 +119,46 @@ private:
         if (ImGui::Button("Обновить")) {
             std::string sort = (sortMode == 1) ? "price" : "";
             products = api->getProducts(selectedCategoryId, sort);
+        }
+
+        if (ImGui::Button("Поиск по артикулу")) {
+            openSearchPopup = true;
+        }
+
+        if (openSearchPopup) {
+            ImGui::OpenPopup("SearchPopup");
+            openSearchPopup = false;
+        }
+
+        if (ImGui::BeginPopupModal("SearchPopup", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::InputText("Артикул", searchArticleBuf, IM_ARRAYSIZE(searchArticleBuf));
+
+            if (ImGui::Button("Найти")) {
+                foundProduct = api->getProductByArticle(searchArticleBuf);
+                hasSearchResult = true;
+            }
+
+            if (hasSearchResult) {
+                if (!foundProduct.article.empty()) {
+                    ImGui::Separator();
+                    ImGui::Text("Название: %s", foundProduct.name.c_str());
+                    ImGui::Text("Бренд: %s", foundProduct.brand.c_str());
+                    ImGui::Text("Цена: %.2f", foundProduct.price);
+                    ImGui::Text("Наличие: %s", foundProduct.available ? "Да" : "Нет");
+                    ImGui::Text("Адрес: %s", foundProduct.address.c_str());
+                    ImGui::Text("Количество: %d", foundProduct.quantity);
+                } else {
+                    ImGui::Text("Товар не найден");
+                }
+            }
+
+            if (ImGui::Button("Закрыть")) {
+                hasSearchResult = false;
+                searchArticleBuf[0] = 0;
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
         }
 
         ImGui::Separator();
@@ -133,9 +175,6 @@ private:
 
             for (size_t i = 0; i < products.size(); ++i) {
                 auto& p = products[i];
-
-                if (strlen(search) > 0 && p.name.find(search) == std::string::npos)
-                    continue;
 
                 ImGui::PushID((int)i);
 

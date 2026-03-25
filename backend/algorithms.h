@@ -36,7 +36,11 @@ struct NodeA1 {
     int weight;          // Частота обращения (вес)
     NodeA1 *left, *right;
 
-    NodeA1(Product p) : article(p.article), data(p), weight(1), left(nullptr), right(nullptr) {}
+    NodeA1(Product p) : article(p.article), data(p), weight(1), left(nullptr), right(nullptr) {
+        // trim spaces from stored article
+        article.erase(0, article.find_first_not_of(" \t\r\n"));
+        article.erase(article.find_last_not_of(" \t\r\n") + 1);
+    }
 };
 
 class OptimalSearchTree {
@@ -80,6 +84,9 @@ public:
 
     // Быстрый поиск товара по артикулу
     Product* search(std::string article) {
+        // trim spaces from input article
+        article.erase(0, article.find_first_not_of(" \t\r\n"));
+        article.erase(article.find_last_not_of(" \t\r\n") + 1);
         NodeA1* curr = root;
         while (curr) {
             if (article == curr->article) return &curr->data;

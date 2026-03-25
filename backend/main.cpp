@@ -15,6 +15,15 @@ int main() {
     Database db;
     db.init();
 
+    OptimalSearchTree index;
+    std::vector<Product> allProducts;
+    for (auto& cat : db.getCategories()) {
+        for (auto& p : cat.products) {
+            allProducts.push_back(p);
+        }
+    }
+    index.buildA1(allProducts);
+
     // CORS настройки
     svr.set_post_routing_handler([](const auto& req, auto& res) {
     res.set_header("Access-Control-Allow-Origin", "*");
@@ -142,17 +151,28 @@ int main() {
         } else { res.status = 404; }
     });
 
-    // 5. Поиск по артикулу (Дерево А1)
-    svr.Get("/api/search", [&](const Request& req, Response& res) {
-        std::cout << "[GET] /api/search article=" << req.get_param_value("article") << std::endl;
-        std::string art = req.get_param_value("article");
-        OptimalSearchTree index;
-        for(auto& cat : db.getCategories()) index.buildA1(cat.products);
+    // Поиск товара по артикулу (через индекс)
+    svr.Get(R"(/api/products/([\w-]+))", [&](const Request& req, Response& res) {
+        std::string article = req.matches[1];
+        std::cout << "[GET] /api/products/" << article << std::endl;
 
-        Product* found = index.search(art);
+        Product* found = index.search(article);
+
         if (found) {
-            res.set_content(json({{"name", found->name}, {"price", found->price}}).dump(), "application/json");
-        } else { res.status = 404; }
+            json j = {
+                {"name", found->name},
+                {"brand", found->brand},
+                {"price", found->price},
+                {"available", found->available},
+                {"address", found->address},
+                {"quantity", found->quantity},
+                {"article", found->article},
+                {"specs", found->specs}
+            };
+            res.set_content(j.dump(), "application/json");
+        } else {
+            res.status = 404;
+        }
     });
 
     // 6. Добавить товар

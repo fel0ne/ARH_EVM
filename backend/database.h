@@ -40,6 +40,9 @@ private:
 
             // 2. Артикул
             ss >> p.article;
+            // trim article
+            p.article.erase(0, p.article.find_first_not_of(" \t\r\n"));
+            p.article.erase(p.article.find_last_not_of(" \t\r\n") + 1);
 
             // 3. Производитель
             ss >> p.brand;

@@ -98,4 +98,21 @@ public:
         return res && res->status == 200;
     }
 
+    ProductDTO getProductByArticle(const std::string& article) {
+        ProductDTO p;
+        auto res = cli.Get(("/api/products/" + article).c_str());
+        if (res && res->status == 200) {
+            auto j = json::parse(res->body);
+            p.name = j.value("name", "");
+            p.brand = j.value("brand", "-");
+            p.price = j.value("price", 0.0);
+            p.available = j.value("available", true);
+            p.address = j.value("address", "-");
+            p.quantity = j.value("quantity", 0);
+            p.article = j.value("article", "");
+            p.specs = j.value("specs", "");
+        }
+        return p;
+    }
+
 };
