@@ -30,6 +30,7 @@ int main() {
 
     // 1. Получить все категории
     svr.Get("/api/categories", [&](const Request&, Response& res) {
+        std::cout << "[GET] /api/categories" << std::endl;
         json j = json::array();
         for (const auto& cat : db.getCategories()) {
             j.push_back({{"id", cat.id}, {"name", cat.name}});
@@ -39,6 +40,7 @@ int main() {
 
     // 2. Создать категорию
     svr.Post("/api/categories", [&](const Request& req, Response& res) {
+        std::cout << "[POST] /api/categories BODY: " << req.body << std::endl;
         try {
             auto j = json::parse(req.body);
             Category newCat;
@@ -60,8 +62,34 @@ int main() {
         } catch (...) { res.status = 400; }
     });
 
+        svr.Put("/api/products", [&](const Request& req, Response& res) {
+        std::cout << "[PUT] /api/products BODY: " << req.body << std::endl;
+        try {
+            auto j = json::parse(req.body);
+            std::string article = j.at("article");
+
+            for (auto& cat : db.getCategories()) {
+                for (auto& p : cat.products) {
+                    std::cout << "Checking product article: " << p.article << std::endl;
+                    if (p.article == article) {
+                        p.name = j.value("name", p.name);
+                        p.price = j.value("price", p.price);
+                        p.quantity = j.value("quantity", p.quantity);
+                        p.brand = j.value("brand", p.brand);
+
+                        db.saveCategoryToFile(cat);
+                        res.status = 200;
+                        return;
+                    }
+                }
+            }
+            res.status = 404;
+        } catch (...) { res.status = 400; }
+    });
+
     // 3. Удалить категорию
     svr.Delete(R"(/api/categories/(\d+))", [&](const Request& req, Response& res) {
+        std::cout << "[DELETE] /api/categories ID: " << req.matches[1] << std::endl;
         int id = std::stoi(req.matches[1]);
         auto& cats = db.getCategories();
         
@@ -82,7 +110,9 @@ int main() {
 
     // 4. Получить товары категории (с QuickSort)
     svr.Get("/api/products", [&](const Request& req, Response& res) {
+        std::cout << "[GET] /api/products categoryId=" << req.get_param_value("categoryId") << std::endl;
         if (!req.has_param("categoryId")) return (void)(res.status = 400);
+        std::string sort = req.has_param("sort") ? req.get_param_value("sort") : "";
         int catId = std::stoi(req.get_param_value("categoryId"));
         
         auto& cats = db.getCategories();
@@ -90,11 +120,23 @@ int main() {
 
         if (it != cats.end()) {
             auto products_copy = it->products;
-            if (!products_copy.empty()) quickSort(products_copy, 0, products_copy.size() - 1);
+            if (sort == "price" && !products_copy.empty()) {
+                std::cout << "Sorting by price (QuickSort)" << std::endl;
+                quickSort(products_copy, 0, products_copy.size() - 1);
+            }
 
             json j = json::array();
             for (const auto& p : products_copy) {
-                j.push_back({{"name", p.name}, {"price", p.price}, {"article", p.article}, {"quantity", p.quantity}});
+                j.push_back({
+                    {"name", p.name},
+                    {"brand", p.brand},
+                    {"price", p.price},
+                    {"available", p.available},
+                    {"address", p.address},
+                    {"quantity", p.quantity},
+                    {"article", p.article},
+                    {"specs", p.specs}
+                });
             }
             res.set_content(j.dump(), "application/json");
         } else { res.status = 404; }
@@ -102,6 +144,7 @@ int main() {
 
     // 5. Поиск по артикулу (Дерево А1)
     svr.Get("/api/search", [&](const Request& req, Response& res) {
+        std::cout << "[GET] /api/search article=" << req.get_param_value("article") << std::endl;
         std::string art = req.get_param_value("article");
         OptimalSearchTree index;
         for(auto& cat : db.getCategories()) index.buildA1(cat.products);
@@ -114,6 +157,7 @@ int main() {
 
     // 6. Добавить товар
     svr.Post("/api/products", [&](const Request& req, Response& res) {
+        std::cout << "[POST] /api/products BODY: " << req.body << std::endl;
         try {
             auto j = json::parse(req.body);
             int catId = j.at("categoryId").get<int>();
@@ -139,12 +183,22 @@ int main() {
 
     // 7. Удалить товар (по артикулу)
     svr.Delete(R"(/api/products/([\w-]+))", [&](const Request& req, Response& res) {
+        std::cout << "[DELETE] /api/products article: " << req.matches[1] << std::endl;
         std::string article = req.matches[1];
+        if (article.empty()) {
+            std::cout << "ERROR: empty article, skip delete" << std::endl;
+            res.status = 400;
+            return;
+        }
         bool found = false;
 
         for (auto& cat : db.getCategories()) {
             auto it = std::remove_if(cat.products.begin(), cat.products.end(), [&](const Product& p) {
-                return p.article == article;
+                if (p.article == article) {
+                    std::cout << "Deleting product: " << p.name << std::endl;
+                    return true;
+                }
+                return false;
             });
 
             if (it != cat.products.end()) {
@@ -158,6 +212,7 @@ int main() {
     });
 
     std::cout << ">>> Server running on http://localhost:8080" << std::endl;
+    std::cout << "Waiting for requests..." << std::endl;
     svr.listen("0.0.0.0", 8080);
     return 0;
 }

@@ -2,16 +2,20 @@
 #define UI_H
 
 #include "imgui.h"
-#include "database.h"
+#include "api_client.h"
 #include <string>
 #include <sstream>
 #include <map>
 
 class UI {
 private:
-    Database* db;
-    Category* selectedCategory = nullptr;
+    ApiClient* api;
+    int selectedCategoryId = -1;
+    std::vector<ProductDTO> products;
+    std::vector<std::pair<int, std::string>> categories;
+    bool categoriesLoaded = false;
     char search[128] = "";
+    int sortMode = 0;
 
     bool openViewPopup = false;
     bool openEditPopup = false;
@@ -39,7 +43,7 @@ private:
     int selectedIndex = -1;
 
 public:
-    UI(Database* database) : db(database) {}
+    UI(ApiClient* apiClient) : api(apiClient) {}
 
     void update() {
         ImGui::Begin("AutoParts Manager");
@@ -69,15 +73,25 @@ private:
         return result;
     }
 
+
     void drawCategories() {
         ImGui::BeginChild("Categories", ImVec2(200, 0), true);
 
         ImGui::Text("Категории");
         ImGui::Separator();
 
-        for (auto& cat : db->getCategories()) {
-            if (ImGui::Selectable(cat.name.c_str(), selectedCategory == &cat)) {
-                selectedCategory = &cat;
+        static bool loadedOnce = false;
+        if (!loadedOnce) {
+            categories = api->getCategories();
+            loadedOnce = true;
+        }
+
+        for (auto& [id, name] : categories) {
+            if (ImGui::Selectable(name.c_str(), selectedCategoryId == id)) {
+                selectedCategoryId = id;
+                std::string sort = (sortMode == 1) ? "price" : "";
+                products = api->getProducts(id, sort);
+                selectedIndex = -1;
             }
         }
 
@@ -87,29 +101,38 @@ private:
     void drawProducts() {
         ImGui::BeginChild("Products", ImVec2(0, 0), true);
 
-        if (!selectedCategory) {
+        if (selectedCategoryId == -1) {
             ImGui::Text("Выберите категорию");
             ImGui::EndChild();
             return;
         }
 
-        ImGui::Text("Категория: %s", selectedCategory->name.c_str());
+        ImGui::Text("Категория ID: %d", selectedCategoryId);
 
         ImGui::InputText("Поиск", search, IM_ARRAYSIZE(search));
+        ImGui::RadioButton("Без сортировки", &sortMode, 0);
+        ImGui::SameLine();
+        ImGui::RadioButton("По цене", &sortMode, 1);
+
+        if (ImGui::Button("Обновить")) {
+            std::string sort = (sortMode == 1) ? "price" : "";
+            products = api->getProducts(selectedCategoryId, sort);
+        }
 
         ImGui::Separator();
 
-        if (ImGui::BeginTable("ProductsTable", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+        if (ImGui::BeginTable("ProductsTable", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
             ImGui::TableSetupColumn("Название");
             ImGui::TableSetupColumn("Бренд");
             ImGui::TableSetupColumn("Цена");
             ImGui::TableSetupColumn("Наличие");
             ImGui::TableSetupColumn("Адрес");
             ImGui::TableSetupColumn("Кол-во");
+            ImGui::TableSetupColumn("Артикул");
             ImGui::TableHeadersRow();
 
-            for (size_t i = 0; i < selectedCategory->products.size(); ++i) {
-                auto& p = selectedCategory->products[i];
+            for (size_t i = 0; i < products.size(); ++i) {
+                auto& p = products[i];
 
                 if (strlen(search) > 0 && p.name.find(search) == std::string::npos)
                     continue;
@@ -145,6 +168,7 @@ private:
                     ImGui::Text("-");
 
                 ImGui::TableNextColumn(); ImGui::Text("%d", p.quantity);
+                ImGui::TableNextColumn(); ImGui::Text("%s", p.article.c_str());
 
                 ImGui::PopID();
             }
@@ -160,7 +184,7 @@ private:
 
         if (selectedIndex >= 0 && ImGui::BeginPopupModal("ViewPopup", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
 
-            auto& p = selectedCategory->products[selectedIndex];
+            auto& p = products[selectedIndex];
 
             ImGui::Text("%s", p.name.c_str());
             ImGui::Separator();
@@ -191,8 +215,13 @@ private:
             ImGui::SameLine();
 
             if (ImGui::Button("Удалить")) {
-                selectedCategory->products.erase(selectedCategory->products.begin() + selectedIndex);
-                db->saveCategoryToFile(*selectedCategory);
+                if (!p.article.empty()) {
+                    api->deleteProduct(p.article);
+                } else {
+                    std::cout << "ERROR: empty article on frontend" << std::endl;
+                }
+                std::string sort = (sortMode == 1) ? "price" : "";
+                products = api->getProducts(selectedCategoryId, sort);
                 selectedIndex = -1;
                 ImGui::CloseCurrentPopup();
             }
@@ -227,18 +256,19 @@ private:
             ImGui::InputText("Характеристики", editSpecs, IM_ARRAYSIZE(editSpecs));
 
             if (ImGui::Button("Сохранить")) {
-                auto& p = selectedCategory->products[selectedIndex];
+                ProductDTO dto;
+                dto.name = editName;
+                dto.brand = editBrand;
+                dto.price = editPrice;
+                dto.available = editAvailable;
+                dto.address = editAddress;
+                dto.quantity = editQuantity;
+                dto.article = editArticle;
+                dto.specs = editSpecs;
 
-                p.name = editName;
-                p.brand = editBrand;
-                p.price = editPrice;
-                p.available = editAvailable;
-                p.address = editAddress;
-                p.quantity = editQuantity;
-                p.article = editArticle;
-                p.specs = editSpecs;
-
-                db->saveCategoryToFile(*selectedCategory);
+                api->updateProduct(dto);
+                products = api->getProducts(selectedCategoryId);
+                selectedIndex = -1;
 
                 ImGui::CloseCurrentPopup();
             }
@@ -272,7 +302,7 @@ private:
             ImGui::InputText("Характеристики", specsBuf, IM_ARRAYSIZE(specsBuf));
 
             if (ImGui::Button("Добавить")) {
-                Product p;
+                ProductDTO p;
                 p.name = nameBuf;
                 p.brand = brandBuf;
                 p.price = priceBuf;
@@ -282,8 +312,9 @@ private:
                 p.article = articleBuf;
                 p.specs = specsBuf;
 
-                selectedCategory->products.push_back(p);
-                db->saveCategoryToFile(*selectedCategory);
+                api->addProduct(selectedCategoryId, p);
+                products = api->getProducts(selectedCategoryId);
+                selectedIndex = -1;
 
                 clearForm();
             }

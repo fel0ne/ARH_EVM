@@ -30,13 +30,12 @@ int main() {
         NULL,
         io.Fonts->GetGlyphRangesCyrillic()
     );
+
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 150");
 
-    Database db;
-    db.init();
-
-    UI ui(&db);
+    ApiClient api;
+    UI ui(&api);
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
@@ -56,4 +55,5 @@ int main() {
     }
 
     glfwTerminate();
+    return 0;
 }

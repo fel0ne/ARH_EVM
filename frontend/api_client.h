@@ -8,9 +8,13 @@ using json = nlohmann::json;
 
 struct ProductDTO {
     std::string name;
+    std::string brand;
     double price;
-    std::string article;
+    bool available;
+    std::string address;
     int quantity;
+    std::string article;
+    std::string specs;
 };
 
 class ApiClient {
@@ -32,19 +36,25 @@ public:
         return result;
     }
 
-    std::vector<ProductDTO> getProducts(int categoryId) {
+    std::vector<ProductDTO> getProducts(int categoryId, const std::string& sort = "") {
         std::vector<ProductDTO> result;
 
-        auto res = cli.Get(("/api/products?categoryId=" + std::to_string(categoryId)).c_str());
+        std::string url = "/api/products?categoryId=" + std::to_string(categoryId);
+        if (!sort.empty()) url += "&sort=" + sort;
+        auto res = cli.Get(url.c_str());
         if (res && res->status == 200) {
             auto j = json::parse(res->body);
             for (auto& item : j) {
-                result.push_back({
-                    item["name"],
-                    item["price"],
-                    item["article"],
-                    item["quantity"]
-                });
+                ProductDTO p;
+                p.name = item.value("name", "");
+                p.brand = item.value("brand", "-");
+                p.price = item.value("price", 0.0);
+                p.available = item.value("available", true);
+                p.address = item.value("address", "-");
+                p.quantity = item.value("quantity", 0);
+                p.article = item.value("article", "");
+                p.specs = item.value("specs", "");
+                result.push_back(p);
             }
         }
         return result;
@@ -54,12 +64,38 @@ public:
         json j = {
             {"categoryId", catId},
             {"name", p.name},
+            {"brand", p.brand},
             {"price", p.price},
+            {"available", p.available},
+            {"address", p.address},
+            {"quantity", p.quantity},
             {"article", p.article},
-            {"quantity", p.quantity}
+            {"specs", p.specs}
         };
 
         auto res = cli.Post("/api/products", j.dump(), "application/json");
         return res && res->status == 201;
     }
+
+    bool deleteProduct(const std::string& article) {
+        auto res = cli.Delete(("/api/products/" + article).c_str());
+        return res && res->status == 204;
+    }
+
+    bool updateProduct(const ProductDTO& p) {
+        json j = {
+            {"name", p.name},
+            {"brand", p.brand},
+            {"price", p.price},
+            {"available", p.available},
+            {"address", p.address},
+            {"quantity", p.quantity},
+            {"article", p.article},
+            {"specs", p.specs}
+        };
+
+        auto res = cli.Put("/api/products", j.dump(), "application/json");
+        return res && res->status == 200;
+    }
+
 };
