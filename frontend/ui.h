@@ -49,7 +49,21 @@ public:
     UI(ApiClient* apiClient) : api(apiClient) {}
 
     void update() {
-        ImGui::Begin("AutoParts Manager");
+        // 1. Получаем размер главного окна (viewport)
+        ImGuiViewport* viewport = ImGui::GetMainViewport();
+        
+        // 2. Устанавливаем позицию и размер окна ImGui равными размеру окна GLFW
+        ImGui::SetNextWindowPos(viewport->WorkPos);
+        ImGui::SetNextWindowSize(viewport->WorkSize);
+
+        // 3. Устанавливаем флаги, чтобы окно нельзя было двигать, менять размер или сворачивать
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | 
+                                        ImGuiWindowFlags_NoMove | 
+                                        ImGuiWindowFlags_NoResize | 
+                                        ImGuiWindowFlags_NoSavedSettings;
+
+        // 4. Создаем окно с этими флагами
+        ImGui::Begin("AutoParts Manager", NULL, window_flags);
 
         drawCategories();
         ImGui::SameLine();
