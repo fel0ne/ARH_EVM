@@ -7,3 +7,9 @@
 [submodule "backend/third_party/googletest"]
 	path = backend/third_party/googletest
 	url = https://github.com/google/googletest.git
+[submodule "frontend/third_party/glfw"]
+	path = frontend/third_party/glfw
+	url = https://github.com/glfw/glfw.git
+[submodule "frontend/third_party/imgui"]
+	path = frontend/third_party/imgui
+	url = https://github.com/ocornut/imgui.git
