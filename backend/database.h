@@ -11,7 +11,7 @@
 
 class Database {
 private:
-    const std::string BASE_DIR = "../base/";
+    const std::string BASE_DIR = "base/";
     std::vector<Category> categories;
 
     // Внутренняя функция парсинга конкретного файла (например, аккумулятор.txt)
@@ -103,7 +103,7 @@ public:
         for(auto &c : filename) c = tolower((unsigned char)c);
         
         // Путь относительно бинарника в build/ к папке ../base/
-        std::ofstream outFile("../base/" + filename + ".txt");
+        std::ofstream outFile("base/" + filename + ".txt");
         
         if (outFile.is_open()) {
             for (const auto& p : cat.products) {
