@@ -13,6 +13,7 @@ file(GLOB IMGUI_SRC
     third_party/imgui/backends/imgui_impl_opengl3.cpp
 )
 
+
 # ✅ СНАЧАЛА создаем exe
 add_executable(frontend
     main.cpp
@@ -23,10 +24,12 @@ add_executable(frontend
 target_include_directories(frontend PRIVATE
     third_party/imgui
     third_party/imgui/backends
+    third_party/
     ../backend
     ../backend/third_party/json/include
     ../backend/third_party/cpp-httplib
 )
+
 
 # OpenGL
 find_package(OpenGL REQUIRED)

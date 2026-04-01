@@ -3,9 +3,56 @@
 
 #include "imgui.h"
 #include "api_client.h"
+
+// stb_image для декодирования JPEG из памяти
+// Если stb_image.h уже подключён где-то в проекте — убери define и include
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
+#ifdef __APPLE__
+  #include <OpenGL/gl3.h>
+#else
+  #include <GL/gl.h>
+#endif
+
 #include <string>
 #include <sstream>
 #include <map>
+#include <vector>
+
+// Вспомогательная структура — загруженная OpenGL-текстура
+struct Texture {
+    GLuint id = 0;
+    int width = 0;
+    int height = 0;
+};
+
+// Загрузить текстуру из байт в памяти
+static Texture loadTextureFromMemory(const std::vector<unsigned char>& data) {
+    Texture tex;
+    if (data.empty()) return tex;
+
+    int channels;
+    unsigned char* pixels = stbi_load_from_memory(
+        data.data(), (int)data.size(),
+        &tex.width, &tex.height, &channels, 4); // всегда RGBA
+
+    if (!pixels) return tex;
+
+    glGenTextures(1, &tex.id);
+    glBindTexture(GL_TEXTURE_2D, tex.id);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+                 tex.width, tex.height, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    stbi_image_free(pixels);
+    return tex;
+}
+
+static void freeTexture(Texture& tex) {
+    if (tex.id) { glDeleteTextures(1, &tex.id); tex.id = 0; }
+}
 
 class UI {
 private:
@@ -13,17 +60,17 @@ private:
     int selectedCategoryId = -1;
     std::vector<ProductDTO> products;
     std::vector<std::pair<int, std::string>> categories;
-    bool categoriesLoaded = false;
     int sortMode = 0;
 
     bool openViewPopup = false;
     bool openEditPopup = false;
     bool openSearchPopup = false;
+    bool openImagesPopup = false;   // <-- новый попап картинок
+
     char searchArticleBuf[64] = "";
     ProductDTO foundProduct;
     bool hasSearchResult = false;
 
-    // buffers для добавления товара
     char nameBuf[128] = "";
     char brandBuf[128] = "";
     float priceBuf = 0.0f;
@@ -33,7 +80,6 @@ private:
     char specsBuf[256] = "";
     bool availableBuf = true;
 
-    // buffers для редактирования
     char editName[128] = "";
     char editBrand[128] = "";
     float editPrice = 0.0f;
@@ -45,63 +91,83 @@ private:
 
     int selectedIndex = -1;
 
+    // Картинки текущего товара
+    std::vector<Texture> currentTextures;
+    int currentImageIndex = 0;        // какую картинку показываем
+    std::string currentCategoryFolder; // папка категории для запроса
+
+    // Освободить текущие текстуры
+    void clearTextures() {
+        for (auto& t : currentTextures) freeTexture(t);
+        currentTextures.clear();
+        currentImageIndex = 0;
+    }
+
+    // Загрузить все картинки товара
+    void loadProductImages(const ProductDTO& p) {
+        clearTextures();
+        for (const auto& imgName : p.images) {
+            auto bytes = api->getImage(currentCategoryFolder, imgName);
+            Texture tex = loadTextureFromMemory(bytes);
+            currentTextures.push_back(tex);
+        }
+    }
+
+    // Из названия категории делаем имя папки
+    static std::string categoryToFolder(const std::string& catName) {
+        std::string folder = catName;
+        std::replace(folder.begin(), folder.end(), ' ', '_');
+        for (auto& c : folder) c = tolower((unsigned char)c);
+        return folder;
+    }
+
+    // Найти имя категории по id
+    std::string getCategoryName(int id) {
+        for (auto& [cid, cname] : categories)
+            if (cid == id) return cname;
+        return "";
+    }
+
 public:
     UI(ApiClient* apiClient) : api(apiClient) {}
 
+    ~UI() { clearTextures(); }
+
     void update() {
-        // 1. Получаем размер главного окна (viewport)
         ImGuiViewport* viewport = ImGui::GetMainViewport();
-        
-        // 2. Устанавливаем позицию и размер окна ImGui равными размеру окна GLFW
         ImGui::SetNextWindowPos(viewport->WorkPos);
         ImGui::SetNextWindowSize(viewport->WorkSize);
 
-        // 3. Устанавливаем флаги, чтобы окно нельзя было двигать, менять размер или сворачивать
-        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | 
-                                        ImGuiWindowFlags_NoMove | 
-                                        ImGuiWindowFlags_NoResize | 
-                                        ImGuiWindowFlags_NoSavedSettings;
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                                 ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings;
 
-        // 4. Создаем окно с этими флагами
-        ImGui::Begin("AutoParts Manager", NULL, window_flags);
-
+        ImGui::Begin("AutoParts Manager", NULL, flags);
         drawCategories();
         ImGui::SameLine();
         drawProducts();
-
         ImGui::End();
     }
 
 private:
-
     std::map<std::string, std::string> parseSpecs(const std::string& specs) {
         std::map<std::string, std::string> result;
         std::stringstream ss(specs);
         std::string pair;
-
         while (ss >> pair) {
             size_t pos = pair.find(':');
-            if (pos != std::string::npos) {
-                std::string key = pair.substr(0, pos);
-                std::string value = pair.substr(pos + 1);
-                result[key] = value;
-            }
+            if (pos != std::string::npos)
+                result[pair.substr(0, pos)] = pair.substr(pos + 1);
         }
         return result;
     }
 
-
     void drawCategories() {
         ImGui::BeginChild("Categories", ImVec2(200, 0), true);
-
         ImGui::Text("Категории");
         ImGui::Separator();
 
         static bool loadedOnce = false;
-        if (!loadedOnce) {
-            categories = api->getCategories();
-            loadedOnce = true;
-        }
+        if (!loadedOnce) { categories = api->getCategories(); loadedOnce = true; }
 
         for (auto& [id, name] : categories) {
             if (ImGui::Selectable(name.c_str(), selectedCategoryId == id)) {
@@ -109,9 +175,9 @@ private:
                 std::string sort = (sortMode == 1) ? "price" : "";
                 products = api->getProducts(id, sort);
                 selectedIndex = -1;
+                currentCategoryFolder = categoryToFolder(name);
             }
         }
-
         ImGui::EndChild();
     }
 
@@ -125,7 +191,6 @@ private:
         }
 
         ImGui::Text("Категория ID: %d", selectedCategoryId);
-
         ImGui::RadioButton("Без сортировки", &sortMode, 0);
         ImGui::SameLine();
         ImGui::RadioButton("По цене", &sortMode, 1);
@@ -135,23 +200,17 @@ private:
             products = api->getProducts(selectedCategoryId, sort);
         }
 
-        if (ImGui::Button("Поиск по артикулу")) {
-            openSearchPopup = true;
-        }
+        ImGui::SameLine();
+        if (ImGui::Button("Поиск по артикулу")) openSearchPopup = true;
 
-        if (openSearchPopup) {
-            ImGui::OpenPopup("SearchPopup");
-            openSearchPopup = false;
-        }
+        if (openSearchPopup) { ImGui::OpenPopup("SearchPopup"); openSearchPopup = false; }
 
         if (ImGui::BeginPopupModal("SearchPopup", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::InputText("Артикул", searchArticleBuf, IM_ARRAYSIZE(searchArticleBuf));
-
             if (ImGui::Button("Найти")) {
                 foundProduct = api->getProductByArticle(searchArticleBuf);
                 hasSearchResult = true;
             }
-
             if (hasSearchResult) {
                 if (!foundProduct.article.empty()) {
                     ImGui::Separator();
@@ -165,13 +224,11 @@ private:
                     ImGui::Text("Товар не найден");
                 }
             }
-
             if (ImGui::Button("Закрыть")) {
                 hasSearchResult = false;
                 searchArticleBuf[0] = 0;
                 ImGui::CloseCurrentPopup();
             }
-
             ImGui::EndPopup();
         }
 
@@ -189,15 +246,11 @@ private:
 
             for (size_t i = 0; i < products.size(); ++i) {
                 auto& p = products[i];
-
                 ImGui::PushID((int)i);
-
                 ImGui::TableNextRow();
-
                 ImGui::TableNextColumn();
                 if (ImGui::Selectable(p.name.c_str())) {
                     selectedIndex = i;
-
                     strcpy(editName, p.name.c_str());
                     strcpy(editBrand, p.brand.c_str());
                     strcpy(editAddress, p.address.c_str());
@@ -206,99 +259,119 @@ private:
                     editPrice = p.price;
                     editQuantity = p.quantity;
                     editAvailable = p.available;
-
                     openViewPopup = true;
                 }
-
                 ImGui::TableNextColumn(); ImGui::Text("%s", p.brand.c_str());
                 ImGui::TableNextColumn(); ImGui::Text("%.2f", p.price);
                 ImGui::TableNextColumn(); ImGui::Text(p.available ? "Да" : "Нет");
-
-                ImGui::TableNextColumn();
-                if (p.available)
-                    ImGui::Text("%s", p.address.c_str());
-                else
-                    ImGui::Text("-");
-
+                ImGui::TableNextColumn(); ImGui::Text(p.available ? p.address.c_str() : "-");
                 ImGui::TableNextColumn(); ImGui::Text("%d", p.quantity);
                 ImGui::TableNextColumn(); ImGui::Text("%s", p.article.c_str());
-
                 ImGui::PopID();
             }
-
             ImGui::EndTable();
         }
 
         // --- Popup просмотра ---
-        if (openViewPopup) {
-            ImGui::OpenPopup("ViewPopup");
-            openViewPopup = false;
-        }
+        if (openViewPopup) { ImGui::OpenPopup("ViewPopup"); openViewPopup = false; }
 
         if (selectedIndex >= 0 && ImGui::BeginPopupModal("ViewPopup", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-
             auto& p = products[selectedIndex];
 
             ImGui::Text("%s", p.name.c_str());
             ImGui::Separator();
-
             ImGui::Text("Бренд: %s", p.brand.c_str());
             ImGui::Text("Цена: %.2f", p.price);
             ImGui::Text("Наличие: %s", p.available ? "Да" : "Нет");
-
-            if (p.available)
-                ImGui::Text("Адрес: %s", p.address.c_str());
-
+            if (p.available) ImGui::Text("Адрес: %s", p.address.c_str());
             ImGui::Text("Количество: %d", p.quantity);
-
             ImGui::Separator();
             ImGui::Text("Характеристики:");
-
-            auto specs = parseSpecs(p.specs);
-            for (auto& [k, v] : specs) {
+            for (auto& [k, v] : parseSpecs(p.specs))
                 ImGui::BulletText("%s: %s", k.c_str(), v.c_str());
-            }
 
             ImGui::Separator();
 
-            if (ImGui::Button("Редактировать")) {
-                openEditPopup = true;
+            // Кнопка картинок — показываем только если они есть
+            if (!p.images.empty()) {
+                ImGui::Text("Фото: %d шт.", (int)p.images.size());
+                if (ImGui::Button("Смотреть фото")) {
+                    loadProductImages(p);
+                    currentImageIndex = 0;
+                    openImagesPopup = true;
+                }
+                ImGui::SameLine();
             }
 
+            if (ImGui::Button("Редактировать")) openEditPopup = true;
             ImGui::SameLine();
-
             if (ImGui::Button("Удалить")) {
-                if (!p.article.empty()) {
-                    api->deleteProduct(p.article);
-                } else {
-                    std::cout << "ERROR: empty article on frontend" << std::endl;
-                }
+                if (!p.article.empty()) api->deleteProduct(p.article);
                 std::string sort = (sortMode == 1) ? "price" : "";
                 products = api->getProducts(selectedCategoryId, sort);
                 selectedIndex = -1;
                 ImGui::CloseCurrentPopup();
             }
-
             ImGui::SameLine();
-
             if (ImGui::Button("Закрыть")) {
                 selectedIndex = -1;
                 ImGui::CloseCurrentPopup();
             }
 
             ImGui::EndPopup();
-            if (openEditPopup) {
-                ImGui::OpenPopup("EditPopup");
-                openEditPopup = false;
+
+            if (openEditPopup) { ImGui::OpenPopup("EditPopup"); openEditPopup = false; }
+        }
+
+        // --- Popup картинок ---
+        if (openImagesPopup) { ImGui::OpenPopup("ImagesPopup"); openImagesPopup = false; }
+
+        if (ImGui::BeginPopupModal("ImagesPopup", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+            if (currentTextures.empty()) {
+                ImGui::Text("Картинки не загружены");
+            } else {
+                // Показываем текущую картинку
+                Texture& tex = currentTextures[currentImageIndex];
+
+                ImGui::Text("Фото %d / %d", currentImageIndex + 1, (int)currentTextures.size());
+
+                if (tex.id) {
+                    // Масштабируем картинку, вписывая в 600x450
+                    float maxW = 600.0f, maxH = 450.0f;
+                    float scaleW = maxW / tex.width;
+                    float scaleH = maxH / tex.height;
+                    float scale = (scaleW < scaleH) ? scaleW : scaleH;
+                    if (scale > 1.0f) scale = 1.0f; // не увеличиваем маленькие
+
+                    ImGui::Image((ImTextureID)(intptr_t)tex.id,
+                                 ImVec2(tex.width * scale, tex.height * scale));
+                } else {
+                    ImGui::Text("[Ошибка загрузки]");
+                }
+
+                // Навигация
+                ImGui::Separator();
+                if (currentImageIndex > 0) {
+                    if (ImGui::Button("< Назад")) currentImageIndex--;
+                    ImGui::SameLine();
+                }
+                if (currentImageIndex < (int)currentTextures.size() - 1) {
+                    if (ImGui::Button("Вперёд >")) currentImageIndex++;
+                    ImGui::SameLine();
+                }
             }
+
+            if (ImGui::Button("Закрыть")) {
+                clearTextures();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
         }
 
         // --- Popup редактирования ---
         if (ImGui::BeginPopupModal("EditPopup", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-
             ImGui::Text("Редактирование");
             ImGui::Separator();
-
             ImGui::InputText("Название", editName, IM_ARRAYSIZE(editName));
             ImGui::InputText("Бренд", editBrand, IM_ARRAYSIZE(editBrand));
             ImGui::InputFloat("Цена", &editPrice);
@@ -310,41 +383,26 @@ private:
 
             if (ImGui::Button("Сохранить")) {
                 ProductDTO dto;
-                dto.name = editName;
-                dto.brand = editBrand;
-                dto.price = editPrice;
-                dto.available = editAvailable;
-                dto.address = editAddress;
-                dto.quantity = editQuantity;
-                dto.article = editArticle;
-                dto.specs = editSpecs;
-
+                dto.name = editName; dto.brand = editBrand; dto.price = editPrice;
+                dto.available = editAvailable; dto.address = editAddress;
+                dto.quantity = editQuantity; dto.article = editArticle; dto.specs = editSpecs;
                 api->updateProduct(dto);
                 products = api->getProducts(selectedCategoryId);
                 selectedIndex = -1;
-
                 ImGui::CloseCurrentPopup();
             }
-
             ImGui::SameLine();
-
-            if (ImGui::Button("Отмена")) {
-                ImGui::CloseCurrentPopup();
-            }
-
+            if (ImGui::Button("Отмена")) ImGui::CloseCurrentPopup();
             ImGui::EndPopup();
         }
 
         ImGui::Separator();
-
         drawAddProduct();
-
         ImGui::EndChild();
     }
 
     void drawAddProduct() {
         if (ImGui::CollapsingHeader("Добавить товар")) {
-
             ImGui::InputText("Название", nameBuf, IM_ARRAYSIZE(nameBuf));
             ImGui::InputText("Бренд", brandBuf, IM_ARRAYSIZE(brandBuf));
             ImGui::InputFloat("Цена", &priceBuf);
@@ -356,33 +414,20 @@ private:
 
             if (ImGui::Button("Добавить")) {
                 ProductDTO p;
-                p.name = nameBuf;
-                p.brand = brandBuf;
-                p.price = priceBuf;
-                p.available = availableBuf;
-                p.address = addressBuf;
-                p.quantity = quantityBuf;
-                p.article = articleBuf;
-                p.specs = specsBuf;
-
+                p.name = nameBuf; p.brand = brandBuf; p.price = priceBuf;
+                p.available = availableBuf; p.address = addressBuf;
+                p.quantity = quantityBuf; p.article = articleBuf; p.specs = specsBuf;
                 api->addProduct(selectedCategoryId, p);
                 products = api->getProducts(selectedCategoryId);
                 selectedIndex = -1;
-
                 clearForm();
             }
         }
     }
 
     void clearForm() {
-        nameBuf[0] = 0;
-        brandBuf[0] = 0;
-        addressBuf[0] = 0;
-        articleBuf[0] = 0;
-        specsBuf[0] = 0;
-        priceBuf = 0.0f;
-        quantityBuf = 0;
-        availableBuf = true;
+        nameBuf[0] = brandBuf[0] = addressBuf[0] = articleBuf[0] = specsBuf[0] = 0;
+        priceBuf = 0.0f; quantityBuf = 0; availableBuf = true;
     }
 };
 

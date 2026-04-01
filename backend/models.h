@@ -5,16 +5,16 @@
 #include <vector>
 
 struct Product {
-    std::string name;        // Название (с нижними подчеркиваниями)
-    std::string brand;       // Бренд
-    double price;            // Цена
-    bool available;          // Наличие (Да/Нет -> true/false)
-    std::string address;     // Адрес склада
-    int quantity;            // Количество
-    std::string article;     // Артикул (в файлах пока '-')
-    std::string specs;       // Дополнительные характеристики (строка до конца файла)
+    std::string name;
+    std::string brand;
+    double price;
+    bool available;
+    std::string address;
+    int quantity;
+    std::string article;
+    std::vector<std::string> images; // ["00101", "00102", "00103"]
+    std::string specs;
 
-    // Для QuickSort по умолчанию (по цене)
     bool operator<(const Product& other) const {
         return price < other.price;
     }
@@ -23,7 +23,7 @@ struct Product {
 struct Category {
     int id;
     std::string name;
-    int some_val1; // Значения из auto_parts_main.txt
+    int some_val1;
     int some_val2;
     std::vector<Product> products;
 };

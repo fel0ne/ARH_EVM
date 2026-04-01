@@ -66,21 +66,19 @@ public:
     // 1. Сортируем товары по весу (частоте запросов) через BubbleSort/QuickSort
     // 2. Вставляем их один за другим в обычное дерево поиска
     void buildA1(std::vector<Product>& products) {
-        // Сортировка пузырьком по убыванию "веса" (в данном случае можно использовать количество на складе 
-        // или отдельное поле частоты обращений, если оно есть)
-        for (size_t i = 0; i < products.size() - 1; i++) {
-            for (size_t j = products.size() - 1; j > i; j--) {
-                // Если веса не заданы, А1 часто использует частоту или количество
-                if (products[j].quantity > products[j - 1].quantity) {
-                    std::swap(products[j], products[j - 1]);
-                }
+    if (products.size() < 2) { // <-- защита от underflow
+        for (const auto& p : products) insert(root, p);
+        return;
+    }
+    for (size_t i = 0; i < products.size() - 1; i++) {
+        for (size_t j = products.size() - 1; j > i; j--) {
+            if (products[j].quantity > products[j - 1].quantity) {
+                std::swap(products[j], products[j - 1]);
             }
         }
-
-        for (const auto& p : products) {
-            insert(root, p);
-        }
     }
+    for (const auto& p : products) insert(root, p);
+}
 
     // Быстрый поиск товара по артикулу
     Product* search(std::string article) {
