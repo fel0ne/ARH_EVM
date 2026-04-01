@@ -103,6 +103,12 @@ private:
         currentImageIndex = 0;
     }
 
+    std::string getSortParam() {
+        if (sortMode == 1) return "price";
+        if (sortMode == 2) return "complex";
+        return "";
+    }
+
     // Загрузить все картинки товара
     void loadProductImages(const ProductDTO& p) {
         clearTextures();
@@ -172,8 +178,7 @@ private:
         for (auto& [id, name] : categories) {
             if (ImGui::Selectable(name.c_str(), selectedCategoryId == id)) {
                 selectedCategoryId = id;
-                std::string sort = (sortMode == 1) ? "price" : "";
-                products = api->getProducts(id, sort);
+                products = api->getProducts(id, getSortParam());
                 selectedIndex = -1;
                 currentCategoryFolder = categoryToFolder(name);
             }
@@ -190,14 +195,14 @@ private:
             return;
         }
 
-        ImGui::Text("Категория ID: %d", selectedCategoryId);
         ImGui::RadioButton("Без сортировки", &sortMode, 0);
         ImGui::SameLine();
         ImGui::RadioButton("По цене", &sortMode, 1);
+        ImGui::SameLine();
+        ImGui::RadioButton("По бренду + цене", &sortMode, 2);  // <-- новая
 
         if (ImGui::Button("Обновить")) {
-            std::string sort = (sortMode == 1) ? "price" : "";
-            products = api->getProducts(selectedCategoryId, sort);
+            products = api->getProducts(selectedCategoryId, getSortParam());
         }
 
         ImGui::SameLine();
@@ -307,8 +312,7 @@ private:
             ImGui::SameLine();
             if (ImGui::Button("Удалить")) {
                 if (!p.article.empty()) api->deleteProduct(p.article);
-                std::string sort = (sortMode == 1) ? "price" : "";
-                products = api->getProducts(selectedCategoryId, sort);
+                products = api->getProducts(selectedCategoryId, getSortParam());
                 selectedIndex = -1;
                 ImGui::CloseCurrentPopup();
             }

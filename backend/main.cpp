@@ -90,6 +90,8 @@ int main() {
             auto products_copy = it->products;
             if (sort == "price" && !products_copy.empty())
                 quickSort(products_copy, 0, products_copy.size() - 1);
+            else if (sort == "complex" && !products_copy.empty())
+                quickSortComplex(products_copy, 0, products_copy.size() - 1);
 
             json j = json::array();
             for (const auto& p : products_copy) {
@@ -97,13 +99,13 @@ int main() {
                     {"name", p.name}, {"brand", p.brand}, {"price", p.price},
                     {"available", p.available}, {"address", p.address},
                     {"quantity", p.quantity}, {"article", p.article},
-                    {"specs", p.specs}, {"images", p.images}  // <-- добавили
+                    {"specs", p.specs}, {"images", p.images}
                 });
             }
             res.set_content(j.dump(), "application/json");
         } else res.status = 404;
     });
-
+    
     svr.Get(R"(/api/products/([\w-]+))", [&](const Request& req, Response& res) {
         std::string article = req.matches[1];
         Product* found = index.search(article);
