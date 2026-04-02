@@ -29,10 +29,9 @@ static Texture loadTextureFromMemory(const std::vector<unsigned char>& data) {
     if (data.empty()) return tex;
 
     int channels;
-    //загруж картинку в исходном количестве каналов
     unsigned char* pixels = stbi_load_from_memory(
         data.data(), (int)data.size(),
-        &tex.width, &tex.height, &channels, 0); 
+        &tex.width, &tex.height, &channels, 0);
 
     if (!pixels) return tex;
 
@@ -44,16 +43,12 @@ static Texture loadTextureFromMemory(const std::vector<unsigned char>& data) {
 
     glGenTextures(1, &tex.id);
     glBindTexture(GL_TEXTURE_2D, tex.id);
-    
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    
     glTexImage2D(GL_TEXTURE_2D, 0, format,
                  tex.width, tex.height, 0,
                  format, GL_UNSIGNED_BYTE, pixels);
-                 
     stbi_image_free(pixels);
     return tex;
 }
@@ -73,7 +68,6 @@ private:
     bool openViewPopup = false;
     bool openEditPopup = false;
     bool openSearchPopup = false;
-    bool openImagesPopup = false;  
 
     char searchArticleBuf[64] = "";
     ProductDTO foundProduct;
@@ -99,9 +93,8 @@ private:
 
     int selectedIndex = -1;
 
-    //картинки текущего товара
     std::vector<Texture> currentTextures;
-    int currentImageIndex = 0;  
+    int currentImageIndex = 0;
     std::string currentCategoryFolder;
 
     void clearTextures() {
@@ -116,7 +109,6 @@ private:
         return "";
     }
 
-    //загрузить все картинки товара
     void loadProductImages(const ProductDTO& p) {
         clearTextures();
         for (const auto& imgName : p.images) {
@@ -204,7 +196,7 @@ private:
         ImGui::SameLine();
         ImGui::RadioButton("По цене", &sortMode, 1);
         ImGui::SameLine();
-        ImGui::RadioButton("По бренду + цене", &sortMode, 2);  // <-- новая
+        ImGui::RadioButton("По бренду + цене", &sortMode, 2);
 
         if (ImGui::Button("Обновить")) {
             products = api->getProducts(selectedCategoryId, getSortParam());
@@ -282,8 +274,15 @@ private:
             ImGui::EndTable();
         }
 
-        //Popup просмотра
-        if (openViewPopup) { ImGui::OpenPopup("ViewPopup"); openViewPopup = false; }
+        // --- Popup просмотра ---
+        if (openViewPopup) {
+            ImGui::OpenPopup("ViewPopup");
+            openViewPopup = false;
+            if (selectedIndex >= 0 && selectedIndex < (int)products.size()) {
+                loadProductImages(products[selectedIndex]);
+                currentImageIndex = 0;
+            }
+        }
 
         if (selectedIndex >= 0 && ImGui::BeginPopupModal("ViewPopup", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             auto& p = products[selectedIndex];
@@ -300,17 +299,22 @@ private:
             for (auto& [k, v] : parseSpecs(p.specs))
                 ImGui::BulletText("%s: %s", k.c_str(), v.c_str());
 
-            ImGui::Separator();
-
-            //кнопка картинок
-            if (!p.images.empty()) {
-                ImGui::Text("Фото: %d шт.", (int)p.images.size());
-                if (ImGui::Button("Смотреть фото")) {
-                    loadProductImages(p);
-                    currentImageIndex = 0;
-                    openImagesPopup = true;
+            //картинки в ряд
+            if (!currentTextures.empty()) {
+                ImGui::Separator();
+                ImGui::Text("Фото (%d шт.):", (int)currentTextures.size());
+                for (auto& tex : currentTextures) {
+                    if (tex.id) {
+                        float maxH = 200.0f;
+                        float scale = maxH / tex.height;
+                        if (scale > 1.0f) scale = 1.0f;
+                        ImGui::Image((ImTextureID)(intptr_t)tex.id,
+                                    ImVec2(tex.width * scale, tex.height * scale));
+                        ImGui::SameLine();
+                    }
                 }
-                ImGui::SameLine();
+                ImGui::NewLine();
+                ImGui::Separator();
             }
 
             if (ImGui::Button("Редактировать")) openEditPopup = true;
@@ -319,60 +323,19 @@ private:
                 if (!p.article.empty()) api->deleteProduct(p.article);
                 products = api->getProducts(selectedCategoryId, getSortParam());
                 selectedIndex = -1;
+                clearTextures();
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
             if (ImGui::Button("Закрыть")) {
                 selectedIndex = -1;
+                clearTextures();
                 ImGui::CloseCurrentPopup();
             }
 
             ImGui::EndPopup();
 
             if (openEditPopup) { ImGui::OpenPopup("EditPopup"); openEditPopup = false; }
-        }
-
-        //popup картинок 
-        if (openImagesPopup) { ImGui::OpenPopup("ImagesPopup"); openImagesPopup = false; }
-
-        if (ImGui::BeginPopupModal("ImagesPopup", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            if (currentTextures.empty()) {
-                ImGui::Text("Картинки не загружены");
-            } else {
-                //показываем текущую картинку
-                Texture& tex = currentTextures[currentImageIndex];
-
-                ImGui::Text("Фото %d / %d", currentImageIndex + 1, (int)currentTextures.size());
-
-                if (tex.id) {
-                    float maxW = 600.0f, maxH = 450.0f;
-                    float scaleW = maxW / tex.width;
-                    float scaleH = maxH / tex.height;
-                    float scale = (scaleW < scaleH) ? scaleW : scaleH;
-                    if (scale > 1.0f) scale = 1.0f; 
-
-                    ImGui::Image((ImTextureID)(intptr_t)tex.id,
-                                 ImVec2(tex.width * scale, tex.height * scale));
-                } else {
-                    ImGui::Text("[Ошибка загрузки]");
-                }
-
-                ImGui::Separator();
-                if (currentImageIndex > 0) {
-                    if (ImGui::Button("< Назад")) currentImageIndex--;
-                    ImGui::SameLine();
-                }
-                if (currentImageIndex < (int)currentTextures.size() - 1) {
-                    if (ImGui::Button("Вперёд >")) currentImageIndex++;
-                    ImGui::SameLine();
-                }
-            }
-
-            if (ImGui::Button("Закрыть")) {
-                clearTextures();
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::EndPopup();
         }
 
         if (ImGui::BeginPopupModal("EditPopup", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
