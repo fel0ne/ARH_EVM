@@ -33,19 +33,34 @@ static Texture loadTextureFromMemory(const std::vector<unsigned char>& data) {
     if (data.empty()) return tex;
 
     int channels;
+    // Загружаем картинку в исходном количестве каналов (передаем 0 вместо 4)
     unsigned char* pixels = stbi_load_from_memory(
         data.data(), (int)data.size(),
-        &tex.width, &tex.height, &channels, 4); // всегда RGBA
+        &tex.width, &tex.height, &channels, 0); 
 
     if (!pixels) return tex;
 
+    // Определяем формат в зависимости от количества каналов в картинке
+    GLenum format = GL_RGB;
+    if (channels == 1) format = GL_RED;
+    else if (channels == 2) format = GL_RG;
+    else if (channels == 3) format = GL_RGB;
+    else if (channels == 4) format = GL_RGBA;
+
     glGenTextures(1, &tex.id);
     glBindTexture(GL_TEXTURE_2D, tex.id);
+    
+    // ⚠️ ВАЖНО ДЛЯ LINUX: Сбрасываем выравнивание строк до 1 байта
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+    
+    // Передаем правильный внутренний формат и формат пикселей
+    glTexImage2D(GL_TEXTURE_2D, 0, format,
                  tex.width, tex.height, 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+                 format, GL_UNSIGNED_BYTE, pixels);
+                 
     stbi_image_free(pixels);
     return tex;
 }
