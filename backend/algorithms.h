@@ -6,7 +6,6 @@
 #include <algorithm>
 #include "models.h"
 
-// --- QUICK SORT по цене ---
 void quickSort(std::vector<Product>& A, int L, int R) {
     double x = A[(L + R) / 2].price;
     int i = L, j = R;
@@ -19,7 +18,7 @@ void quickSort(std::vector<Product>& A, int L, int R) {
     if (i < R) quickSort(A, i, R);
 }
 
-// --- QUICK SORT по сложному ключу: сначала бренд (A-Z), потом цена ---
+//quicksort по сложному ключу: 1) бренд, 2) цена
 bool complexLess(const Product& a, const Product& b) {
     if (a.brand != b.brand) return a.brand < b.brand;
     return a.price < b.price;
@@ -37,7 +36,6 @@ void quickSortComplex(std::vector<Product>& A, int L, int R) {
     if (i < R) quickSortComplex(A, i, R);
 }
 
-// --- ДЕРЕВО ОПТИМАЛЬНОГО ПОИСКА (Алгоритм А1) ---
 struct NodeA1 {
     std::string article;
     Product data;

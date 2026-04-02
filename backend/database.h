@@ -46,11 +46,11 @@ private:
 
             ss >> p.quantity;
 
-            // --- Новое: читаем картинки ---
+            //читаем картинки
             std::string imagesStr;
             ss >> imagesStr;
             if (imagesStr != "-") {
-                // Разбиваем "00101_00102_00103" по '_'
+                //разбиваем картинки 00101_00102_00103
                 std::stringstream imgss(imagesStr);
                 std::string img;
                 while (std::getline(imgss, img, '_')) {
@@ -59,7 +59,7 @@ private:
             }
 
             std::string separator;
-            ss >> separator; // проглатываем "-"
+            ss >> separator; 
             std::getline(ss, p.specs);
             if (!p.specs.empty() && p.specs[0] == ' ') p.specs.erase(0, 1);
 
@@ -86,15 +86,14 @@ public:
             std::stringstream ss(line);
             Category cat;
 
-            // Читаем ID
+            //Читаем ID
             if (!(ss >> cat.id)) continue;
 
-            // Читаем слова названия, пока не встретим число
+            //Читаем слова названия, пока не встретим число
             cat.name = "";
             std::string token;
             std::vector<std::string> extras;
             while (ss >> token) {
-                // Если токен — число, это уже some_val, не часть имени
                 bool isNumber = !token.empty() && 
                     std::all_of(token.begin(), token.end(), ::isdigit);
                 if (isNumber) {
@@ -104,7 +103,7 @@ public:
                     cat.name += token;
                 }
             }
-            // extras[0] = some_val1, extras[1] = some_val2
+            //extras[0] = some_val1, extras[1] = some_val2
             cat.some_val1 = (extras.size() > 0) ? std::stoi(extras[0]) : 0;
             cat.some_val2 = (extras.size() > 1) ? std::stoi(extras[1]) : 0;
 
@@ -144,7 +143,7 @@ public:
             std::string addrSave = p.address;
             std::replace(addrSave.begin(), addrSave.end(), ' ', '_');
 
-            // Собираем картинки обратно через '_'
+            //Собираем картинки обратно _
             std::string imagesSave = "-";
             if (!p.images.empty()) {
                 imagesSave = "";

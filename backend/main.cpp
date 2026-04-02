@@ -11,14 +11,12 @@ using json = nlohmann::json;
 using namespace httplib;
 namespace fs = std::filesystem;
 
-// Читаем файл в бинарный вектор
 static std::vector<char> readBinaryFile(const std::string& path) {
     std::ifstream f(path, std::ios::binary);
     return std::vector<char>((std::istreambuf_iterator<char>(f)),
                               std::istreambuf_iterator<char>());
 }
 
-// Из имени категории делаем имя папки: "глушитель задний" -> "глушитель_задний"
 static std::string categoryToFolder(const std::string& catName) {
     std::string folder = catName;
     std::replace(folder.begin(), folder.end(), ' ', '_');
@@ -38,7 +36,7 @@ int main() {
     }
     index.buildA1(allProducts);
 
-    // CORS
+    //CORS
     svr.set_post_routing_handler([](const auto&, auto& res) {
         res.set_header("Access-Control-Allow-Origin", "*");
         res.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -46,7 +44,6 @@ int main() {
     });
     svr.Options(R"(/api/.*)", [](const Request&, Response& res) { res.status = 200; });
 
-    // --- КАТЕГОРИИ ---
     svr.Get("/api/categories", [&](const Request&, Response& res) {
         json j = json::array();
         for (const auto& cat : db.getCategories())
@@ -77,7 +74,6 @@ int main() {
         else res.status = 404;
     });
 
-    // --- ТОВАРЫ ---
     svr.Get("/api/products", [&](const Request& req, Response& res) {
         if (!req.has_param("categoryId")) return (void)(res.status = 400);
         std::string sort = req.has_param("sort") ? req.get_param_value("sort") : "";
@@ -179,14 +175,12 @@ int main() {
         res.status = found ? 204 : 404;
     });
 
-    // --- КАРТИНКИ ---
-    // GET /api/images/{categoryFolder}/{filename}.jpg
-    // Пример: /api/images/глушитель_задний/00101.jpg
+    //пикчи
     svr.Get(R"(/api/images/([^/]+)/([^/]+))", [&](const Request& req, Response& res) {
         std::string folder = req.matches[1];
         std::string filename = req.matches[2];
 
-        // Защита от path traversal
+        //Защита от path traversal
         if (folder.find("..") != std::string::npos || filename.find("..") != std::string::npos) {
             res.status = 400; return;
         }

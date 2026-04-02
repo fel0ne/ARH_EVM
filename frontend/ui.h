@@ -4,8 +4,6 @@
 #include "imgui.h"
 #include "api_client.h"
 
-// stb_image для декодирования JPEG из памяти
-// Если stb_image.h уже подключён где-то в проекте — убери define и include
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
@@ -20,27 +18,24 @@
 #include <map>
 #include <vector>
 
-// Вспомогательная структура — загруженная OpenGL-текстура
 struct Texture {
     GLuint id = 0;
     int width = 0;
     int height = 0;
 };
 
-// Загрузить текстуру из байт в памяти
 static Texture loadTextureFromMemory(const std::vector<unsigned char>& data) {
     Texture tex;
     if (data.empty()) return tex;
 
     int channels;
-    // Загружаем картинку в исходном количестве каналов (передаем 0 вместо 4)
+    //загруж картинку в исходном количестве каналов
     unsigned char* pixels = stbi_load_from_memory(
         data.data(), (int)data.size(),
         &tex.width, &tex.height, &channels, 0); 
 
     if (!pixels) return tex;
 
-    // Определяем формат в зависимости от количества каналов в картинке
     GLenum format = GL_RGB;
     if (channels == 1) format = GL_RED;
     else if (channels == 2) format = GL_RG;
@@ -50,13 +45,11 @@ static Texture loadTextureFromMemory(const std::vector<unsigned char>& data) {
     glGenTextures(1, &tex.id);
     glBindTexture(GL_TEXTURE_2D, tex.id);
     
-    // ⚠️ ВАЖНО ДЛЯ LINUX: Сбрасываем выравнивание строк до 1 байта
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     
-    // Передаем правильный внутренний формат и формат пикселей
     glTexImage2D(GL_TEXTURE_2D, 0, format,
                  tex.width, tex.height, 0,
                  format, GL_UNSIGNED_BYTE, pixels);
@@ -80,7 +73,7 @@ private:
     bool openViewPopup = false;
     bool openEditPopup = false;
     bool openSearchPopup = false;
-    bool openImagesPopup = false;   // <-- новый попап картинок
+    bool openImagesPopup = false;  
 
     char searchArticleBuf[64] = "";
     ProductDTO foundProduct;
@@ -106,12 +99,11 @@ private:
 
     int selectedIndex = -1;
 
-    // Картинки текущего товара
+    //картинки текущего товара
     std::vector<Texture> currentTextures;
-    int currentImageIndex = 0;        // какую картинку показываем
-    std::string currentCategoryFolder; // папка категории для запроса
+    int currentImageIndex = 0;  
+    std::string currentCategoryFolder;
 
-    // Освободить текущие текстуры
     void clearTextures() {
         for (auto& t : currentTextures) freeTexture(t);
         currentTextures.clear();
@@ -124,7 +116,7 @@ private:
         return "";
     }
 
-    // Загрузить все картинки товара
+    //загрузить все картинки товара
     void loadProductImages(const ProductDTO& p) {
         clearTextures();
         for (const auto& imgName : p.images) {
@@ -134,7 +126,6 @@ private:
         }
     }
 
-    // Из названия категории делаем имя папки
     static std::string categoryToFolder(const std::string& catName) {
         std::string folder = catName;
         std::replace(folder.begin(), folder.end(), ' ', '_');
@@ -142,7 +133,6 @@ private:
         return folder;
     }
 
-    // Найти имя категории по id
     std::string getCategoryName(int id) {
         for (auto& [cid, cname] : categories)
             if (cid == id) return cname;
@@ -292,7 +282,7 @@ private:
             ImGui::EndTable();
         }
 
-        // --- Popup просмотра ---
+        //Popup просмотра
         if (openViewPopup) { ImGui::OpenPopup("ViewPopup"); openViewPopup = false; }
 
         if (selectedIndex >= 0 && ImGui::BeginPopupModal("ViewPopup", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -312,7 +302,7 @@ private:
 
             ImGui::Separator();
 
-            // Кнопка картинок — показываем только если они есть
+            //кнопка картинок
             if (!p.images.empty()) {
                 ImGui::Text("Фото: %d шт.", (int)p.images.size());
                 if (ImGui::Button("Смотреть фото")) {
@@ -342,25 +332,24 @@ private:
             if (openEditPopup) { ImGui::OpenPopup("EditPopup"); openEditPopup = false; }
         }
 
-        // --- Popup картинок ---
+        //popup картинок 
         if (openImagesPopup) { ImGui::OpenPopup("ImagesPopup"); openImagesPopup = false; }
 
         if (ImGui::BeginPopupModal("ImagesPopup", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             if (currentTextures.empty()) {
                 ImGui::Text("Картинки не загружены");
             } else {
-                // Показываем текущую картинку
+                //показываем текущую картинку
                 Texture& tex = currentTextures[currentImageIndex];
 
                 ImGui::Text("Фото %d / %d", currentImageIndex + 1, (int)currentTextures.size());
 
                 if (tex.id) {
-                    // Масштабируем картинку, вписывая в 600x450
                     float maxW = 600.0f, maxH = 450.0f;
                     float scaleW = maxW / tex.width;
                     float scaleH = maxH / tex.height;
                     float scale = (scaleW < scaleH) ? scaleW : scaleH;
-                    if (scale > 1.0f) scale = 1.0f; // не увеличиваем маленькие
+                    if (scale > 1.0f) scale = 1.0f; 
 
                     ImGui::Image((ImTextureID)(intptr_t)tex.id,
                                  ImVec2(tex.width * scale, tex.height * scale));
@@ -368,7 +357,6 @@ private:
                     ImGui::Text("[Ошибка загрузки]");
                 }
 
-                // Навигация
                 ImGui::Separator();
                 if (currentImageIndex > 0) {
                     if (ImGui::Button("< Назад")) currentImageIndex--;
@@ -387,7 +375,6 @@ private:
             ImGui::EndPopup();
         }
 
-        // --- Popup редактирования ---
         if (ImGui::BeginPopupModal("EditPopup", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("Редактирование");
             ImGui::Separator();

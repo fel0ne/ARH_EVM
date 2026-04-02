@@ -12,7 +12,7 @@ struct Product {
     std::string address;
     int quantity;
     std::string article;
-    std::vector<std::string> images; // ["00101", "00102", "00103"]
+    std::vector<std::string> images; //["00101", "00102", "00103"]
     std::string specs;
 
     bool operator<(const Product& other) const {

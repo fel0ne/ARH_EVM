@@ -14,7 +14,7 @@ struct ProductDTO {
     std::string address;
     int quantity;
     std::string article;
-    std::vector<std::string> images; // <-- добавили
+    std::vector<std::string> images; 
     std::string specs;
 };
 
@@ -22,7 +22,7 @@ class ApiClient {
 private:
     httplib::Client cli{"http://localhost:8080"};
 
-    // Хелпер для парсинга ProductDTO из json-объекта
+    //парсинг ProductDTO из json
     ProductDTO parseProduct(const json& item) {
         ProductDTO p;
         p.name = item.value("name", "");
@@ -95,8 +95,7 @@ public:
         return res && res->status == 200;
     }
 
-    // Загружает байты картинки с сервера
-    // categoryFolder — например "глушитель_задний", imageName — "00101"
+    //загружаем байты картинки
     std::vector<unsigned char> getImage(const std::string& categoryFolder,
                                         const std::string& imageName) {
         std::string url = "/api/images/" + categoryFolder + "/" + imageName + ".jpg";
