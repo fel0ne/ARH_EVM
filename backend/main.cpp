@@ -36,7 +36,7 @@ int main() {
     }
     index.buildA1(allProducts);
 
-    //CORS
+    // CORS
     svr.set_post_routing_handler([](const auto&, auto& res) {
         res.set_header("Access-Control-Allow-Origin", "*");
         res.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -101,7 +101,7 @@ int main() {
             res.set_content(j.dump(), "application/json");
         } else res.status = 404;
     });
-    
+
     svr.Get(R"(/api/products/([\w-]+))", [&](const Request& req, Response& res) {
         std::string article = req.matches[1];
         Product* found = index.search(article);
@@ -110,7 +110,7 @@ int main() {
                 {"name", found->name}, {"brand", found->brand}, {"price", found->price},
                 {"available", found->available}, {"address", found->address},
                 {"quantity", found->quantity}, {"article", found->article},
-                {"specs", found->specs}, {"images", found->images}  // <-- добавили
+                {"specs", found->specs}, {"images", found->images}
             };
             res.set_content(j.dump(), "application/json");
         } else res.status = 404;
@@ -130,6 +130,8 @@ int main() {
                 p.quantity = j.at("quantity").get<int>();
                 p.brand = j.value("brand", "-");
                 p.available = p.quantity > 0;
+                p.address = j.value("address", "-");  // <-- добавили
+                p.specs = j.value("specs", "");        // <-- добавили
                 it->products.push_back(p);
                 db.saveCategoryToFile(*it);
                 res.status = 201;
@@ -175,21 +177,75 @@ int main() {
         res.status = found ? 204 : 404;
     });
 
-    //пикчи
+    // Картинки
     svr.Get(R"(/api/images/([^/]+)/([^/]+))", [&](const Request& req, Response& res) {
         std::string folder = req.matches[1];
         std::string filename = req.matches[2];
-
-        //Защита от path traversal
         if (folder.find("..") != std::string::npos || filename.find("..") != std::string::npos) {
             res.status = 400; return;
         }
-
         std::string path = "base/" + folder + "/" + filename;
         auto data = readBinaryFile(path);
         if (data.empty()) { res.status = 404; return; }
-
         res.set_content(data.data(), data.size(), "image/jpeg");
+    });
+
+    // OpenRouter
+    svr.Post("/api/suggest-specs", [&](const Request& req, Response& res) {
+        try {
+            auto j = json::parse(req.body);
+            std::string name = j.value("name", "");
+            std::string brand = j.value("brand", "");
+
+            if (name.empty()) { res.status = 400; return; }
+
+            httplib::SSLClient openrouter("openrouter.ai");
+            openrouter.set_connection_timeout(10);
+            openrouter.set_read_timeout(30);
+
+            std::string apiKey = "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";
+
+            json payload = {
+                {"model", "openrouter/auto"},
+                {"messages", json::array({
+                    {{"role", "user"},
+                     {"content", "Ты помощник по автозапчастям. Дай ТОЛЬКО технические характеристики для запчасти: " + brand + " " + name +
+                    ". Правила: только технические параметры (материал, размеры, мощность, объем и тп), формат СТРОГО: ключ:значение через пробел, без пробелов внутри пары, без артикулов, без применимости, без производителя, без пояснений, без переносов строк, максимум 6 параметров. Пример ответа: материал:сталь диаметр:60мм резьба:M14x1.5 давление:3бар"}}
+                })}
+            };
+
+            httplib::Headers headers = {
+                {"Authorization", "Bearer " + apiKey},
+                {"Content-Type", "application/json"},
+                {"HTTP-Referer", "http://localhost"},
+                {"X-Title", "AutoParts"}
+            };
+
+            auto result = openrouter.Post("/api/v1/chat/completions",
+                                          headers,
+                                          payload.dump(),
+                                          "application/json");
+
+            if (result && result->status == 200) {
+                auto rj = json::parse(result->body);
+                std::string specs = rj["choices"][0]["message"]["content"];
+                for (auto& c : specs) if (c == '\n') c = ' ';
+                res.set_content(json({{"specs", specs}}).dump(), "application/json");
+            } else {
+                std::cerr << "OpenRouter error: ";
+                if (result) {
+                    std::cerr << "status=" << result->status
+                              << " body=" << result->body << std::endl;
+                } else {
+                    std::cerr << "no response, error="
+                              << httplib::to_string(result.error()) << std::endl;
+                }
+                res.status = 502;
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "Exception in suggest-specs: " << e.what() << std::endl;
+            res.status = 400;
+        }
     });
 
     std::cout << ">>> Server running on http://localhost:8080" << std::endl;

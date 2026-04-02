@@ -14,7 +14,7 @@ struct ProductDTO {
     std::string address;
     int quantity;
     std::string article;
-    std::vector<std::string> images; 
+    std::vector<std::string> images;
     std::string specs;
 };
 
@@ -22,7 +22,6 @@ class ApiClient {
 private:
     httplib::Client cli{"http://localhost:8080"};
 
-    //парсинг ProductDTO из json
     ProductDTO parseProduct(const json& item) {
         ProductDTO p;
         p.name = item.value("name", "");
@@ -95,14 +94,23 @@ public:
         return res && res->status == 200;
     }
 
-    //загружаем байты картинки
     std::vector<unsigned char> getImage(const std::string& categoryFolder,
                                         const std::string& imageName) {
         std::string url = "/api/images/" + categoryFolder + "/" + imageName + ".jpg";
         auto res = cli.Get(url.c_str());
-        if (res && res->status == 200) {
+        if (res && res->status == 200)
             return std::vector<unsigned char>(res->body.begin(), res->body.end());
-        }
         return {};
+    }
+
+    // Запрос характеристик через OpenRouter
+    std::string suggestSpecs(const std::string& name, const std::string& brand) {
+        json j = {{"name", name}, {"brand", brand}};
+        auto res = cli.Post("/api/suggest-specs", j.dump(), "application/json");
+        if (res && res->status == 200) {
+            auto rj = json::parse(res->body);
+            return rj.value("specs", "");
+        }
+        return "";
     }
 };

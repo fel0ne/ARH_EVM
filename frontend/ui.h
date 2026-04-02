@@ -79,7 +79,7 @@ private:
     int quantityBuf = 0;
     char addressBuf[128] = "";
     char articleBuf[64] = "";
-    char specsBuf[256] = "";
+    char specsBuf[512] = "";
     bool availableBuf = true;
 
     char editName[128] = "";
@@ -379,7 +379,18 @@ private:
             ImGui::InputText("Адрес", addressBuf, IM_ARRAYSIZE(addressBuf));
             ImGui::InputInt("Количество", &quantityBuf);
             ImGui::InputText("Артикул", articleBuf, IM_ARRAYSIZE(articleBuf));
+
             ImGui::InputText("Характеристики", specsBuf, IM_ARRAYSIZE(specsBuf));
+            ImGui::SameLine();
+            if (ImGui::Button("Авто")) {
+                if (nameBuf[0] != 0) {
+                    std::string specs = api->suggestSpecs(nameBuf, brandBuf);
+                    if (!specs.empty()) {
+                        strncpy(specsBuf, specs.c_str(), IM_ARRAYSIZE(specsBuf) - 1);
+                        specsBuf[IM_ARRAYSIZE(specsBuf) - 1] = 0;
+                    }
+                }
+            }
 
             if (ImGui::Button("Добавить")) {
                 ProductDTO p;
