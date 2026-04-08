@@ -4,8 +4,9 @@ project(AutoPartsStore)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Принудительно arm64
-set(CMAKE_OSX_ARCHITECTURES "arm64")
+if(APPLE)
+    set(CMAKE_OSX_ARCHITECTURES "arm64")
+endif()
 
 set(EXT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../backend/third_party)
 
