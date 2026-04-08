@@ -11,7 +11,6 @@ file(GLOB IMGUI_SRC
     third_party/imgui/backends/imgui_impl_opengl3.cpp
 )
 
-
 add_executable(frontend
     main.cpp
     ${IMGUI_SRC}
@@ -26,7 +25,11 @@ target_include_directories(frontend PRIVATE
     ../backend/third_party/cpp-httplib
 )
 
-
-find_package(OpenGL REQUIRED)
-
-target_link_libraries(frontend glfw OpenGL::GL)
+if(APPLE)
+    find_package(OpenGL REQUIRED)
+    target_compile_definitions(frontend PRIVATE GL_SILENCE_DEPRECATION)
+    target_link_libraries(frontend glfw OpenGL::GL)
+else()
+    find_package(OpenGL REQUIRED)
+    target_link_libraries(frontend glfw OpenGL::GL)
+endif()

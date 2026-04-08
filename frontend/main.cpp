@@ -12,31 +12,45 @@
 int main() {
     glfwInit();
 
+#ifdef __APPLE__
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-    #ifdef __APPLE__
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-    #endif
+    const char* glsl_version = "#version 150";
+#else
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+    const char* glsl_version = "#version 100";
+#endif
 
     GLFWwindow* window = glfwCreateWindow(1280, 720, "AutoParts UI", NULL, NULL);
     glfwMakeContextCurrent(window);
+    glfwSwapInterval(1); 
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
 
     ImGuiIO& io = ImGui::GetIO();
 
+#ifdef __APPLE__
     io.Fonts->AddFontFromFileTTF(
         "fonts/Roboto-Regular.ttf",
         18.0f,
         NULL,
         io.Fonts->GetGlyphRangesCyrillic()
     );
+#else
+    io.Fonts->AddFontFromFileTTF(
+        "fonts/Roboto-Regular.ttf",
+        16.0f,
+        NULL,
+        io.Fonts->GetGlyphRangesCyrillic()
+    );
+#endif
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init("#version 150");
+    ImGui_ImplOpenGL3_Init(glsl_version);
 
     ApiClient api;
     UI ui(&api);

@@ -9,8 +9,18 @@
 
 #ifdef __APPLE__
   #include <OpenGL/gl3.h>
+#elif defined(__linux__)
+  #include <GLES2/gl2.h>
 #else
   #include <GL/gl.h>
+#endif
+
+// GL_RED и GL_RG могут отсутствовать в GLES2 — заменяем на GL_LUMINANCE
+#ifndef GL_RED
+  #define GL_RED GL_LUMINANCE
+#endif
+#ifndef GL_RG
+  #define GL_RG GL_LUMINANCE_ALPHA
 #endif
 
 #include <string>
@@ -36,8 +46,8 @@ static Texture loadTextureFromMemory(const std::vector<unsigned char>& data) {
     if (!pixels) return tex;
 
     GLenum format = GL_RGB;
-    if (channels == 1) format = GL_RED;
-    else if (channels == 2) format = GL_RG;
+    if (channels == 1) format = GL_LUMINANCE;
+    else if (channels == 2) format = GL_LUMINANCE_ALPHA;
     else if (channels == 3) format = GL_RGB;
     else if (channels == 4) format = GL_RGBA;
 
@@ -111,10 +121,19 @@ private:
 
     void loadProductImages(const ProductDTO& p) {
         clearTextures();
+        // На RPi3 грузим максимум 3 картинки чтобы не съесть всю память
+#ifdef __linux__
+        int maxImages = 3;
+#else
+        int maxImages = (int)p.images.size();
+#endif
+        int count = 0;
         for (const auto& imgName : p.images) {
+            if (count >= maxImages) break;
             auto bytes = api->getImage(currentCategoryFolder, imgName);
             Texture tex = loadTextureFromMemory(bytes);
             currentTextures.push_back(tex);
+            count++;
         }
     }
 
@@ -299,13 +318,17 @@ private:
             for (auto& [k, v] : parseSpecs(p.specs))
                 ImGui::BulletText("%s: %s", k.c_str(), v.c_str());
 
-            //картинки в ряд
+            // На RPi3 картинки меньшего размера чтобы не нагружать память
             if (!currentTextures.empty()) {
                 ImGui::Separator();
                 ImGui::Text("Фото (%d шт.):", (int)currentTextures.size());
+#ifdef __linux__
+                float maxH = 120.0f; // меньше на RPi3
+#else
+                float maxH = 200.0f;
+#endif
                 for (auto& tex : currentTextures) {
                     if (tex.id) {
-                        float maxH = 200.0f;
                         float scale = maxH / tex.height;
                         if (scale > 1.0f) scale = 1.0f;
                         ImGui::Image((ImTextureID)(intptr_t)tex.id,
